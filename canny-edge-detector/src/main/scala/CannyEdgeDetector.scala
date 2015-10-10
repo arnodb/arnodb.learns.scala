@@ -1,3 +1,4 @@
+import scala.annotation.tailrec
 import scala.util.control.Breaks._
 
 import java.io.File
@@ -10,8 +11,56 @@ import javax.imageio.ImageIO
  * Scala implementation of http://www.tomgibara.com/computer-vision/CannyEdgeDetector.java
  */
 
-object CannyEdgeDetector {
+class Kernel(val kernel: Array[Float], val diffKernel: Array[Float], val width: Int) {
+
+    override def toString = {
+        val str = new StringBuilder("Kernel(")
+        @tailrec def more(i: Int, prefix: String) : Unit = {
+            if (i < kernel.size) {
+                str ++= prefix ++= kernel(i).toString
+                if (str.length < 42)
+                    more(i + 1, ", ")
+                else
+                    str ++= ", ..."
+            }
+        }
+        more(0, "")
+        str += ')'
+        str.toString
+    }
+
+}
+
+object Kernel {
+
     val GAUSSIAN_CUT_OFF = 0.005f
+
+    def gaussian(x: Float, sigma: Float): Float = {
+        Math.exp(-(x * x) / (2f * sigma * sigma)).toFloat
+    }
+
+    def apply(kernelRadius: Float, kernelWidth: Int) = {
+        val kernel = Array.fill[Float](kernelWidth)(0)
+        val diffKernel = Array.fill[Float](kernelWidth)(0)
+        var kwidth = 0
+        breakable {
+        while (kwidth < kernelWidth) {
+            val g1 = gaussian(kwidth, kernelRadius)
+            if (g1 <= GAUSSIAN_CUT_OFF && kwidth >= 2)
+                break
+            val g2 = gaussian(kwidth - 0.5f, kernelRadius)
+            val g3 = gaussian(kwidth + 0.5f, kernelRadius)
+            kernel(kwidth) = (g1 + g2 + g3) / 3f / (2f * math.Pi.toFloat * kernelRadius * kernelRadius)
+            diffKernel(kwidth) = g3 - g2
+            kwidth += 1
+        }
+        }
+        new Kernel(kernel.slice(0, kwidth), diffKernel.slice(0, kwidth), kwidth)
+    }
+
+}
+
+object CannyEdgeDetector {
     val MAGNITUDE_SCALE = 100f
     val MAGNITUDE_LIMIT = 1000f
     val MAGNITUDE_MAX: Int = (MAGNITUDE_SCALE * MAGNITUDE_LIMIT).toInt
@@ -67,40 +116,26 @@ class CannyEdgeDetector(
     }
 
     def computeGradients(kernelRadius: Float, kernelWidth: Int) = {
-        val kernel = Array.fill[Float](kernelWidth)(0)
-        val diffKernel = Array.fill[Float](kernelWidth)(0)
 
-        var kwidth = 0
-        breakable {
-        while (kwidth < kernelWidth) {
-            val g1 = gaussian(kwidth, kernelRadius)
-            if (g1 <= CannyEdgeDetector.GAUSSIAN_CUT_OFF && kwidth >= 2)
-                break
-            val g2 = gaussian(kwidth - 0.5f, kernelRadius)
-            val g3 = gaussian(kwidth + 0.5f, kernelRadius)
-            kernel(kwidth) = (g1 + g2 + g3) / 3f / (2f * math.Pi.toFloat * kernelRadius * kernelRadius)
-            diffKernel(kwidth) = g3 - g2
-            kwidth += 1
-        }
-        }
+        val kern = Kernel(kernelRadius, kernelWidth)
 
-        var initX = kwidth - 1
-        var maxX = width - (kwidth - 1)
-        var initY = width * (kwidth - 1)
-        var maxY = width * (height - (kwidth - 1))
+        var initX = kern.width - 1
+        var maxX = width - (kern.width - 1)
+        var initY = width * (kern.width - 1)
+        var maxY = width * (height - (kern.width - 1))
 
         var x: Int = initX
         while (x < maxX) {
             var y = initY
             while (y < maxY) {
                 val index = x + y
-                var sumX = data(index) * kernel(0)
+                var sumX = data(index) * kern.kernel(0)
                 var sumY = sumX
                 var xOffset = 1
                 var yOffset = width
-                while (xOffset < kwidth) {
-                    sumY += kernel(xOffset) * (data(index - yOffset) + data(index + yOffset))
-                    sumX += kernel(xOffset) * (data(index - xOffset) + data(index + xOffset))
+                while (xOffset < kern.width) {
+                    sumY += kern.kernel(xOffset) * (data(index - yOffset) + data(index + yOffset))
+                    sumX += kern.kernel(xOffset) * (data(index - xOffset) + data(index + xOffset))
                     yOffset += width
                     xOffset += 1
                 }
@@ -119,8 +154,8 @@ class CannyEdgeDetector(
                 var sum = 0f
                 val index = x + y
                 var i = 1
-                while (i < kwidth) {
-                    sum += diffKernel(i) * (yConv(index - i) - yConv(index + i))
+                while (i < kern.width) {
+                    sum += kern.diffKernel(i) * (yConv(index - i) - yConv(index + i))
                     i += 1
                 }
 
@@ -130,16 +165,16 @@ class CannyEdgeDetector(
             x += 1
         }
 
-        x = kwidth
-        while(x < width - kwidth) {
+        x = kern.width
+        while(x < width - kern.width) {
             var y = initY
             while (y < maxY) {
                 var sum = 0f
                 val index = x + y
                 var yOffset = width
                 var i = 1
-                while (i < kwidth) {
-                    sum += diffKernel(i) * (xConv(index - yOffset) - xConv(index + yOffset))
+                while (i < kern.width) {
+                    sum += kern.diffKernel(i) * (xConv(index - yOffset) - xConv(index + yOffset))
                     yOffset = width
                     i += 1
                 }
@@ -150,10 +185,10 @@ class CannyEdgeDetector(
             x += 1
         }
 
-        initX = kwidth
-        maxX = width - kwidth
-        initY = width * kwidth
-        maxY = width * (height - kwidth)
+        initX = kern.width
+        maxX = width - kern.width
+        initY = width * kern.width
+        maxY = width * (height - kern.width)
 
         x = initX
         while (x < maxX) {
@@ -245,10 +280,6 @@ class CannyEdgeDetector(
 
     def hypot(x: Float, y: Float): Float = {
         Math.hypot(x, y).toFloat
-    }
-
-    def gaussian(x: Float, sigma: Float): Float = {
-        Math.exp(-(x * x) / (2f * sigma * sigma)).toFloat
     }
 
     def performHysteresis(low: Int, high: Int) {

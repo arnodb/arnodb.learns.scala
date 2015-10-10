@@ -7,6 +7,9 @@ lazy val commonSettings = Seq(
 lazy val root = (project in file(".")).
     settings(commonSettings: _*).
     settings(
-        name := "canny-edge-detector"
+        name := "canny-edge-detector",
+        libraryDependencies ++= Seq(
+            "org.specs2" %% "specs2-core" % "3.6.4" % "test"
+        )
     )
 
