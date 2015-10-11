@@ -11,7 +11,9 @@ import javax.imageio.ImageIO
  * Scala implementation of http://www.tomgibara.com/computer-vision/CannyEdgeDetector.java
  */
 
-class Kernel(val kernel: Array[Float], val diffKernel: Array[Float], val width: Int) {
+class Kernel(val kernel: Array[Float], val diffKernel: Array[Float]) {
+
+    def width: Int = kernel.size
 
     override def toString = {
         val str = new StringBuilder("Kernel(")
@@ -33,9 +35,9 @@ class Kernel(val kernel: Array[Float], val diffKernel: Array[Float], val width: 
 
 object Kernel {
 
-    val GAUSSIAN_CUT_OFF = 0.005f
+    private val GAUSSIAN_CUT_OFF = 0.005f
 
-    def gaussian(x: Float, sigma: Float): Float = {
+    private def gaussian(x: Float, sigma: Float): Float = {
         Math.exp(-(x * x) / (2f * sigma * sigma)).toFloat
     }
 
@@ -55,7 +57,7 @@ object Kernel {
             kwidth += 1
         }
         }
-        new Kernel(kernel.slice(0, kwidth), diffKernel.slice(0, kwidth), kwidth)
+        new Kernel(kernel.slice(0, kwidth), diffKernel.slice(0, kwidth))
     }
 
 }
