@@ -1,5 +1,4 @@
 import scala.annotation.tailrec
-import scala.util.control.Breaks._
 
 import java.io.File
 import java.net.URL
@@ -44,19 +43,23 @@ object Kernel {
     def apply(kernelRadius: Float, kernelWidth: Int) = {
         val kernel = Array.fill[Float](kernelWidth)(0)
         val diffKernel = Array.fill[Float](kernelWidth)(0)
-        var kwidth = 0
-        breakable {
-        while (kwidth < kernelWidth) {
-            val g1 = gaussian(kwidth, kernelRadius)
-            if (g1 <= GAUSSIAN_CUT_OFF && kwidth >= 2)
-                break
-            val g2 = gaussian(kwidth - 0.5f, kernelRadius)
-            val g3 = gaussian(kwidth + 0.5f, kernelRadius)
-            kernel(kwidth) = (g1 + g2 + g3) / 3f / (2f * math.Pi.toFloat * kernelRadius * kernelRadius)
-            diffKernel(kwidth) = g3 - g2
-            kwidth += 1
+        @tailrec def rec(kwidth: Int): Int = {
+            if (kwidth < kernelWidth) {
+                val g1 = gaussian(kwidth, kernelRadius)
+                if (g1 > GAUSSIAN_CUT_OFF || kwidth < 2) {
+                    val g2 = gaussian(kwidth - 0.5f, kernelRadius)
+                    val g3 = gaussian(kwidth + 0.5f, kernelRadius)
+                    kernel(kwidth) = (g1 + g2 + g3) / 3f / (2f * math.Pi.toFloat * kernelRadius * kernelRadius)
+                    diffKernel(kwidth) = g3 - g2
+                    rec(kwidth + 1)
+                } else {
+                    kwidth
+                }
+            } else {
+                kwidth
+            }
         }
-        }
+        val kwidth = rec(0)
         new Kernel(kernel.slice(0, kwidth), diffKernel.slice(0, kwidth))
     }
 
